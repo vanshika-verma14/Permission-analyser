@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Permission Analyzer</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-title">
+        <span class="icon">🛡️</span>
+        <h1>Permission Analyzer</h1>
+        <span class="status-indicator" title="Monitoring active">
+          <span class="pulse"></span>
+        </span>
+      </div>
+      <div class="header-stats">
+        <span id="total-logs" class="stat-badge">0 logs</span>
+      </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="quick-stats">
+      <div class="stat-item">
+        <span class="stat-icon">📷</span>
+        <span id="camera-count">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-icon">🎤</span>
+        <span id="mic-count">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-icon">📍</span>
+        <span id="location-count">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-icon">📋</span>
+        <span id="clipboard-count">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-icon">🔔</span>
+        <span id="notification-count">0</span>
+      </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="section">
+      <h2>Recent Activity</h2>
+      <div id="recent-logs" class="logs-container">
+        <div class="no-logs">No permission activity detected yet</div>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="actions">
+      <button id="view-dashboard" class="btn btn-primary">
+        <span>📊</span> View Dashboard
+      </button>
+      <button id="clear-logs" class="btn btn-secondary">
+        <span>🗑️</span> Clear Logs
+      </button>
+    </div>
+
+    <!-- Settings Toggle -->
+    <div class="settings-section">
+      <label class="toggle-container">
+        <input type="checkbox" id="notifications-toggle" checked>
+        <span class="toggle-slider"></span>
+        <span class="toggle-label">Enable Notifications</span>
+      </label>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>Privacy-First • All data stored locally</p>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

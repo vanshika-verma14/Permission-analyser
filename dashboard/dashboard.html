@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Permission Analyzer - Dashboard</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <div class="dashboard-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <span class="icon">🛡️</span>
+        <h1>Permission Analyzer Dashboard</h1>
+      </div>
+      <div class="header-actions">
+        <button id="export-csv" class="btn btn-primary">
+          <span>📊</span> Export CSV
+        </button>
+        <button id="export-md" class="btn btn-primary">
+          <span>📝</span> Export Markdown
+        </button>
+        <button id="clear-all" class="btn btn-danger">
+          <span>🗑️</span> Clear All
+        </button>
+      </div>
+    </header>
+
+    <!-- Stats Overview -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon">📊</div>
+        <div class="stat-content">
+          <div class="stat-value" id="total-logs">0</div>
+          <div class="stat-label">Total Logs</div>
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-icon">📷</div>
+        <div class="stat-content">
+          <div class="stat-value" id="camera-logs">0</div>
+          <div class="stat-label">Camera Access</div>
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-icon">🎤</div>
+        <div class="stat-content">
+          <div class="stat-value" id="mic-logs">0</div>
+          <div class="stat-label">Microphone Access</div>
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-icon">📍</div>
+        <div class="stat-content">
+          <div class="stat-value" id="location-logs">0</div>
+          <div class="stat-label">Location Access</div>
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-icon">📋</div>
+        <div class="stat-content">
+          <div class="stat-value" id="clipboard-logs">0</div>
+          <div class="stat-label">Clipboard Access</div>
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-icon">🔔</div>
+        <div class="stat-content">
+          <div class="stat-value" id="notification-logs">0</div>
+          <div class="stat-label">Notifications</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters-section">
+      <div class="filter-group">
+        <label for="filter-permission">Filter by Permission:</label>
+        <select id="filter-permission">
+          <option value="all">All Permissions</option>
+          <option value="camera">Camera</option>
+          <option value="microphone">Microphone</option>
+          <option value="location">Location</option>
+          <option value="clipboard-read">Clipboard Read</option>
+          <option value="clipboard-write">Clipboard Write</option>
+          <option value="notifications">Notifications</option>
+        </select>
+      </div>
+      
+      <div class="filter-group">
+        <label for="search-domain">Search Domain:</label>
+        <input type="text" id="search-domain" placeholder="e.g., google.com">
+      </div>
+      
+      <button id="reset-filters" class="btn btn-secondary">Reset Filters</button>
+    </div>
+
+    <!-- Logs Table -->
+    <div class="logs-section">
+      <h2>Permission Activity Logs</h2>
+      <div class="table-container">
+        <table id="logs-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Domain</th>
+              <th>Action</th>
+              <th>Timestamp</th>
+              <th>URL</th>
+            </tr>
+          </thead>
+          <tbody id="logs-tbody">
+            <tr>
+              <td colspan="5" class="no-data">No logs available</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>🔒 Privacy-First Design • All data stored locally in your browser</p>
+      <p>Permission Analyzer v1.0.0</p>
+    </footer>
+  </div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>
