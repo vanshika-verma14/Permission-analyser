@@ -33,7 +33,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
  */
 async function handlePermissionUsage(data) {
   try {
-    // Create log entry
+    // Create comprehensive log entry
     const logEntry = {
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       timestamp: data.timestamp,
@@ -41,7 +41,10 @@ async function handlePermissionUsage(data) {
       domain: data.domain,
       url: data.url,
       permissionType: data.permissionType,
-      action: data.action
+      action: data.action,
+      metadata: data.metadata || {},
+      pageTitle: data.pageTitle || '',
+      isVisible: data.isVisible !== undefined ? data.isVisible : true
     };
 
     // Save to storage
@@ -159,8 +162,11 @@ async function updateSettings(newSettings) {
 }
 
 /**
- * Show desktop notification
+ * Show desktop notification (with spam protection)
  */
+const notificationTracker = new Map();
+const NOTIFICATION_COOLDOWN = 3000; // 3 seconds between same notifications
+
 function showNotification(logEntry) {
   const permissionIcons = {
     'camera': '📷',
@@ -174,12 +180,37 @@ function showNotification(logEntry) {
   const icon = permissionIcons[logEntry.permissionType] || '🔒';
   const permissionName = logEntry.permissionType.replace('-', ' ').toUpperCase();
   
+  // Create unique key for this notification type + domain
+  const notificationKey = `${logEntry.permissionType}-${logEntry.domain}`;
+  const now = Date.now();
+  
+  // Check if we recently showed this exact notification
+  if (notificationTracker.has(notificationKey)) {
+    const lastShown = notificationTracker.get(notificationKey);
+    if (now - lastShown < NOTIFICATION_COOLDOWN) {
+      return; // Skip notification (too soon)
+    }
+  }
+  
+  // Update tracker
+  notificationTracker.set(notificationKey, now);
+  
+  // Clean old entries from tracker
+  for (const [key, timestamp] of notificationTracker.entries()) {
+    if (now - timestamp > 10000) { // Remove entries older than 10s
+      notificationTracker.delete(key);
+    }
+  }
+  
+  // Show notification
   chrome.notifications.create({
     type: 'basic',
     iconUrl: 'icons/icon128.png',
     title: `${icon} Permission Used`,
     message: `${permissionName} accessed by ${logEntry.domain}`,
-    priority: 1
+    priority: 1,
+    requireInteraction: false, // Auto-dismiss
+    silent: false
   });
 }
 

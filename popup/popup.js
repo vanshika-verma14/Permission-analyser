@@ -1,7 +1,4 @@
-/**
- * PERMISSION ANALYZER - POPUP SCRIPT
- * Handles the popup UI and user interactions
- */
+
 
 // DOM Elements
 const totalLogsEl = document.getElementById('total-logs');

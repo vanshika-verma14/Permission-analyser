@@ -1,7 +1,4 @@
-/**
- * PERMISSION ANALYZER - DASHBOARD SCRIPT
- * Handles dashboard display, filtering, and data export
- */
+
 
 // DOM Elements
 const totalLogsEl = document.getElementById('total-logs');
@@ -28,9 +25,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
 });
 
-/**
- * Load logs from storage
- */
+// Load logs from storage
+
 async function loadLogs() {
   try {
     const response = await chrome.runtime.sendMessage({ type: 'GET_LOGS' });

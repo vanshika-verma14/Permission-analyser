@@ -1,154 +1,118 @@
 /**
- * PERMISSION ANALYZER - PROFESSIONAL GRADE INJECTED SCRIPT
- * Purpose: Detect ACTIVE permission usage - especially silent abuse of prior grants
- * Focus: Websites using camera/mic/location WITHOUT showing permission prompt
- * This catches the scenario: "I allowed camera 2 months ago, now they use it secretly"
+ * PERMISSION ANALYZER - PROFESSIONAL GRADE (SMART LOCATION DETECTION)
+ * Purpose: Detect ACTIVE permission usage intelligently
+ * 
+ * Location Detection Logic:
+ * - Logs on FIRST access per page ✓
+ * - Logs on NEW user-initiated actions (e.g., clicking "My Location") ✓
+ * - Does NOT log continuous background updates (spam) ✗
+ * - Does NOT log on page cleanup/exit ✗
  */
 
 (function() {
   'use strict';
 
   // ============================================================
-  // DEDUPLICATION SYSTEM (Prevents spam while maintaining accuracy)
+  // DEDUPLICATION SYSTEM
   // ============================================================
   
-  const activePermissions = new Map(); // Track currently active permissions
-  const recentLogs = new Map(); // Prevent duplicate logs
-  const DEBOUNCE_WINDOW = 2000; // 2 seconds - reasonable window
+  const loggedEvents = new Map();
+  const DEBOUNCE_TIME = 500; // 500ms - faster response, still prevents spam
+
+  // Smart location tracking
+  const locationTracking = {
+    lastLogTime: 0,
+    activeWatchers: new Set(),
+    MIN_LOG_INTERVAL: 5000, // Only log if 5+ seconds since last log (new action)
+    isUnloading: false, // Flag to prevent logging during page unload
+    lastVisibilityChange: 0 // Track when visibility changes
+  };
 
   /**
    * Log a permission usage event
-   * @param {string} permissionType - Type of permission (camera, microphone, etc.)
-   * @param {string} action - What's happening (active-use, accessed, shown)
-   * @param {object} metadata - Additional context
    */
-  function logPermissionUsage(permissionType, action, metadata = {}) {
-    const eventKey = `${permissionType}:${action}`;
+  function notifyPermissionUsage(permissionType, action) {
+    const eventKey = `${permissionType}-${action}`;
     const now = Date.now();
     
     // Check if we recently logged this exact event
-    if (recentLogs.has(eventKey)) {
-      const lastLog = recentLogs.get(eventKey);
-      if (now - lastLog < DEBOUNCE_WINDOW) {
-        return; // Skip duplicate
+    if (loggedEvents.has(eventKey)) {
+      const lastLogTime = loggedEvents.get(eventKey);
+      if (now - lastLogTime < DEBOUNCE_TIME) {
+        return; // Skip duplicate within debounce window
       }
     }
     
-    // Update log timestamp
-    recentLogs.set(eventKey, now);
+    // Update last log time
+    loggedEvents.set(eventKey, now);
     
-    // Clean old entries (older than 10 seconds)
-    for (const [key, timestamp] of recentLogs.entries()) {
-      if (now - timestamp > 10000) {
-        recentLogs.delete(key);
+    // Clean old entries (older than 5 seconds)
+    for (const [key, timestamp] of loggedEvents.entries()) {
+      if (now - timestamp > 5000) {
+        loggedEvents.delete(key);
       }
     }
     
-    // Dispatch event to content script
+    // Dispatch the event
     window.dispatchEvent(new CustomEvent('PERMISSION_DETECTED', {
       detail: {
-        permissionType,
-        action,
-        metadata: {
-          ...metadata,
-          detectionMethod: 'api-interception',
-          timestamp: now
-        }
+        permissionType: permissionType,
+        action: action || 'accessed'
       }
     }));
-    
-    console.log(`[Permission Analyzer] 🔒 ${permissionType.toUpperCase()} - ${action}`, metadata);
   }
 
   // ============================================================
-  // CAMERA & MICROPHONE MONITORING
-  // KEY FEATURE: Detects usage of previously-granted permissions
+  // CAMERA & MICROPHONE DETECTION
   // ============================================================
   
   if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     
     navigator.mediaDevices.getUserMedia = function(constraints) {
-      const requestId = `media-${Date.now()}`;
-      let requestingVideo = false;
-      let requestingAudio = false;
-      
-      if (constraints) {
-        requestingVideo = !!constraints.video;
-        requestingAudio = !!constraints.audio;
-      }
-      
-      // Call original API
+      // Call original function first
       return originalGetUserMedia(constraints).then(stream => {
-        // SUCCESS: Permission was already granted OR user just granted it
-        // Either way, the permission is NOW ACTIVELY BEING USED
-        
-        if (requestingVideo) {
-          logPermissionUsage('camera', 'active-use', {
-            duration: 'started',
-            requestId: requestId,
-            constraints: typeof constraints.video === 'object' ? 'advanced' : 'basic'
-          });
-          activePermissions.set('camera', { stream, requestId });
+        // Successfully obtained media stream
+        if (constraints && constraints.video) {
+          notifyPermissionUsage('camera', 'active');
+        }
+        if (constraints && constraints.audio) {
+          notifyPermissionUsage('microphone', 'active');
         }
         
-        if (requestingAudio) {
-          logPermissionUsage('microphone', 'active-use', {
-            duration: 'started',
-            requestId: requestId,
-            constraints: typeof constraints.audio === 'object' ? 'advanced' : 'basic'
-          });
-          activePermissions.set('microphone', { stream, requestId });
-        }
-        
-        // Monitor stream tracks for ending
+        // Monitor when the stream ends
         stream.getTracks().forEach(track => {
-          const permType = track.kind === 'video' ? 'camera' : 'microphone';
-          
-          // Track when stopped manually
           const originalStop = track.stop.bind(track);
           track.stop = function() {
-            logPermissionUsage(permType, 'stopped', {
-              duration: 'ended',
-              requestId: requestId,
-              reason: 'manual-stop'
-            });
-            activePermissions.delete(permType);
+            const permType = track.kind === 'video' ? 'camera' : 'microphone';
+            notifyPermissionUsage(permType, 'stopped');
             return originalStop();
           };
           
-          // Track when ended (connection closed)
+          // Also monitor track ended event
           track.addEventListener('ended', function() {
-            logPermissionUsage(permType, 'stopped', {
-              duration: 'ended',
-              requestId: requestId,
-              reason: 'connection-ended'
-            });
-            activePermissions.delete(permType);
+            const permType = track.kind === 'video' ? 'camera' : 'microphone';
+            notifyPermissionUsage(permType, 'stopped');
           });
         });
         
         return stream;
       }).catch(err => {
-        // User denied permission - don't log (not actual usage)
+        // Permission denied - don't log
         throw err;
       });
     };
   }
 
-  // Legacy getUserMedia (older websites)
+  // Legacy getUserMedia support
   if (navigator.getUserMedia) {
     const legacyGetUserMedia = navigator.getUserMedia.bind(navigator);
     navigator.getUserMedia = function(constraints, successCallback, errorCallback) {
       return legacyGetUserMedia(
         constraints,
         function(stream) {
-          if (constraints && constraints.video) {
-            logPermissionUsage('camera', 'active-use', { api: 'legacy' });
-          }
-          if (constraints && constraints.audio) {
-            logPermissionUsage('microphone', 'active-use', { api: 'legacy' });
-          }
+          if (constraints && constraints.video) notifyPermissionUsage('camera', 'active');
+          if (constraints && constraints.audio) notifyPermissionUsage('microphone', 'active');
           if (successCallback) successCallback(stream);
         },
         errorCallback
@@ -157,24 +121,44 @@
   }
 
   // ============================================================
-  // GEOLOCATION MONITORING
-  // KEY FEATURE: Detects when websites access your location
+  // GEOLOCATION DETECTION (SMART VERSION)
+  // Logs:
+  // - First access ✓
+  // - User-initiated actions (5+ seconds apart) ✓
+  // Does NOT log:
+  // - Continuous background updates ✗
+  // - Page cleanup ✗
   // ============================================================
   
   if (navigator.geolocation) {
-    // Monitor getCurrentPosition (one-time location access)
+    // Intercept getCurrentPosition (one-time location access)
     const originalGetCurrentPosition = navigator.geolocation.getCurrentPosition.bind(navigator.geolocation);
     navigator.geolocation.getCurrentPosition = function(successCallback, errorCallback, options) {
-      const requestId = `geo-${Date.now()}`;
-      
       return originalGetCurrentPosition(
         function(position) {
-          // SUCCESS: Website got your location
-          logPermissionUsage('location', 'accessed', {
-            requestId: requestId,
-            accuracy: position.coords.accuracy,
-            method: 'getCurrentPosition'
-          });
+          // CRITICAL: Don't log if page is unloading
+          if (locationTracking.isUnloading) {
+            if (successCallback) successCallback(position);
+            return;
+          }
+          
+          const now = Date.now();
+          const timeSinceLastLog = now - locationTracking.lastLogTime;
+          const timeSinceVisibilityChange = now - locationTracking.lastVisibilityChange;
+          
+          // Don't log if this is within 2 seconds of visibility change (Chrome restore)
+          if (timeSinceVisibilityChange < 2000 && locationTracking.lastVisibilityChange > 0) {
+            if (successCallback) successCallback(position);
+            return;
+          }
+          
+          // Log if:
+          // 1. First access (lastLogTime = 0), OR
+          // 2. It's been 5+ seconds since last log (new user action)
+          if (timeSinceLastLog === now || timeSinceLastLog >= locationTracking.MIN_LOG_INTERVAL) {
+            notifyPermissionUsage('location', 'accessed');
+            locationTracking.lastLogTime = now;
+          }
           
           if (successCallback) successCallback(position);
         },
@@ -183,130 +167,144 @@
       );
     };
 
-    // Monitor watchPosition (continuous location tracking)
+    // Intercept watchPosition (continuous tracking)
     const originalWatchPosition = navigator.geolocation.watchPosition.bind(navigator.geolocation);
-    const activeWatchers = new Map();
-    
     navigator.geolocation.watchPosition = function(successCallback, errorCallback, options) {
+      let callbackCount = 0;
+      
       const watchId = originalWatchPosition(
         function(position) {
-          const requestId = `watch-${watchId}`;
-          
-          // Log FIRST access, then less frequently
-          if (!activeWatchers.has(watchId)) {
-            logPermissionUsage('location', 'tracking-started', {
-              requestId: requestId,
-              method: 'watchPosition',
-              watchId: watchId
-            });
-            activeWatchers.set(watchId, { startTime: Date.now(), updateCount: 0 });
-          } else {
-            // Increment update count
-            const watcher = activeWatchers.get(watchId);
-            watcher.updateCount++;
-            
-            // Log every 10th update to show tracking is ongoing
-            if (watcher.updateCount % 10 === 0) {
-              logPermissionUsage('location', 'tracking-active', {
-                requestId: requestId,
-                updateCount: watcher.updateCount,
-                durationMs: Date.now() - watcher.startTime
-              });
-            }
+          // CRITICAL: Don't log if page is unloading
+          if (locationTracking.isUnloading) {
+            if (successCallback) successCallback(position);
+            return;
           }
+          
+          callbackCount++;
+          const now = Date.now();
+          const timeSinceLastLog = now - locationTracking.lastLogTime;
+          const timeSinceVisibilityChange = now - locationTracking.lastVisibilityChange;
+          
+          // Don't log if this is within 2 seconds of visibility change (Chrome restore)
+          if (timeSinceVisibilityChange < 2000 && locationTracking.lastVisibilityChange > 0) {
+            if (successCallback) successCallback(position);
+            return;
+          }
+          
+          // Log if:
+          // 1. First callback (callbackCount === 1), OR
+          // 2. It's been 5+ seconds since last log
+          if (callbackCount === 1 || timeSinceLastLog >= locationTracking.MIN_LOG_INTERVAL) {
+            notifyPermissionUsage('location', 'accessed');
+            locationTracking.lastLogTime = now;
+          }
+          // All other callbacks (rapid updates) = silent
           
           if (successCallback) successCallback(position);
         },
         errorCallback,
         options
       );
+      
+      // Track active watcher
+      locationTracking.activeWatchers.add(watchId);
       
       return watchId;
     };
 
-    // Monitor clearWatch (when tracking stops)
+    // Intercept clearWatch - NO LOGGING AT ALL
+    // This is called on page cleanup/exit - we must NOT log here
     const originalClearWatch = navigator.geolocation.clearWatch.bind(navigator.geolocation);
     navigator.geolocation.clearWatch = function(watchId) {
-      if (activeWatchers.has(watchId)) {
-        const watcher = activeWatchers.get(watchId);
-        logPermissionUsage('location', 'tracking-stopped', {
-          watchId: watchId,
-          totalUpdates: watcher.updateCount,
-          totalDuration: Date.now() - watcher.startTime
-        });
-        activeWatchers.delete(watchId);
-      }
+      // Remove from active watchers silently
+      locationTracking.activeWatchers.delete(watchId);
+      
+      // CRITICAL: Just call original, absolutely NO logging
       return originalClearWatch(watchId);
     };
+    
+    // ADDITIONAL FIX: Prevent any location logging during page unload
+    window.addEventListener('beforeunload', function() {
+      // Set a flag to prevent any location logging during cleanup
+      locationTracking.isUnloading = true;
+    }, false);
+    
+    window.addEventListener('pagehide', function() {
+      // Also handle pagehide event
+      locationTracking.isUnloading = true;
+    }, false);
+    
+    // CHROME RESTORE FIX: Prevent logging when Chrome resumes from taskbar
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'visible') {
+        // Tab became visible (e.g., Chrome restored from taskbar)
+        locationTracking.lastVisibilityChange = Date.now();
+      }
+    }, false);
   }
 
   // ============================================================
-  // CLIPBOARD MONITORING
-  // KEY FEATURE: Detects when websites read/write clipboard
+  // CLIPBOARD DETECTION (ACCURATE - Only logs successful operations)
   // ============================================================
   
   if (navigator.clipboard) {
-    // Monitor clipboard READ (website reading what you copied)
+    // Intercept readText (only log if actually reads text)
     if (navigator.clipboard.readText) {
       const originalReadText = navigator.clipboard.readText.bind(navigator.clipboard);
       navigator.clipboard.readText = function() {
         return originalReadText().then(text => {
-          logPermissionUsage('clipboard-read', 'accessed', {
-            dataType: 'text',
-            dataLength: text ? text.length : 0
-          });
+          // Only log if text was actually read successfully
+          if (text !== undefined && text !== null) {
+            notifyPermissionUsage('clipboard-read', 'accessed');
+          }
           return text;
         }).catch(err => {
+          // Failed to read - don't log
           throw err;
         });
       };
     }
 
+    // Intercept read (only log if actually reads data)
     if (navigator.clipboard.read) {
       const originalRead = navigator.clipboard.read.bind(navigator.clipboard);
       navigator.clipboard.read = function() {
         return originalRead().then(clipboardItems => {
-          const types = [];
+          // Only log if we actually got clipboard data
           if (clipboardItems && clipboardItems.length > 0) {
-            clipboardItems.forEach(item => {
-              types.push(...item.types);
-            });
+            notifyPermissionUsage('clipboard-read', 'accessed');
           }
-          
-          logPermissionUsage('clipboard-read', 'accessed', {
-            dataType: 'mixed',
-            contentTypes: types
-          });
           return clipboardItems;
         }).catch(err => {
+          // Failed to read - don't log
           throw err;
         });
       };
     }
 
-    // Monitor clipboard WRITE (website writing to your clipboard)
+    // Intercept writeText (only log successful writes)
     if (navigator.clipboard.writeText) {
       const originalWriteText = navigator.clipboard.writeText.bind(navigator.clipboard);
       navigator.clipboard.writeText = function(text) {
         return originalWriteText(text).then(() => {
-          logPermissionUsage('clipboard-write', 'accessed', {
-            dataType: 'text',
-            dataLength: text ? text.length : 0
-          });
+          // Successfully wrote to clipboard
+          notifyPermissionUsage('clipboard-write', 'accessed');
         }).catch(err => {
+          // Failed to write - don't log
           throw err;
         });
       };
     }
 
+    // Intercept write (only log successful writes)
     if (navigator.clipboard.write) {
       const originalWrite = navigator.clipboard.write.bind(navigator.clipboard);
       navigator.clipboard.write = function(data) {
         return originalWrite(data).then(() => {
-          logPermissionUsage('clipboard-write', 'accessed', {
-            dataType: 'mixed'
-          });
+          // Successfully wrote to clipboard
+          notifyPermissionUsage('clipboard-write', 'accessed');
         }).catch(err => {
+          // Failed to write - don't log
           throw err;
         });
       };
@@ -314,54 +312,47 @@
   }
 
   // ============================================================
-  // NOTIFICATION MONITORING
-  // KEY FEATURE: Detects when websites show notifications
+  // NOTIFICATION DETECTION
   // ============================================================
   
   if (window.Notification) {
     const OriginalNotification = window.Notification;
     
-    // Wrap Notification constructor
+    // Wrap the Notification constructor
     window.Notification = function(title, options) {
-      logPermissionUsage('notifications', 'shown', {
-        hasTitle: !!title,
-        hasIcon: !!(options && options.icon),
-        hasBody: !!(options && options.body)
-      });
-      
+      notifyPermissionUsage('notifications', 'shown');
       return new OriginalNotification(title, options);
     };
     
-    // Maintain prototype chain
+    // Properly inherit from original
     window.Notification.prototype = OriginalNotification.prototype;
     
-    // Copy static properties with proper descriptors
+    // Copy static methods
+    if (OriginalNotification.requestPermission) {
+      window.Notification.requestPermission = OriginalNotification.requestPermission.bind(OriginalNotification);
+    }
+    
+    // Make permission property read-only
     Object.defineProperty(window.Notification, 'permission', {
-      get: function() { return OriginalNotification.permission; },
+      get: function() {
+        return OriginalNotification.permission;
+      },
       enumerable: true,
       configurable: false
     });
     
+    // Copy other static properties
     if (OriginalNotification.maxActions !== undefined) {
       Object.defineProperty(window.Notification, 'maxActions', {
-        get: function() { return OriginalNotification.maxActions; },
+        get: function() {
+          return OriginalNotification.maxActions;
+        },
         enumerable: true,
         configurable: false
       });
     }
-    
-    // Copy requestPermission method
-    if (OriginalNotification.requestPermission) {
-      window.Notification.requestPermission = OriginalNotification.requestPermission.bind(OriginalNotification);
-    }
   }
 
-  // ============================================================
-  // INITIALIZATION COMPLETE
-  // ============================================================
-  
-  console.log('%c[Permission Analyzer] Professional monitoring active', 'color: #10b981; font-weight: bold;');
-  console.log('[Permission Analyzer] Tracking: Camera, Microphone, Location, Clipboard, Notifications');
-  console.log('[Permission Analyzer] Focus: Detecting silent usage of pre-granted permissions');
-  
+  console.log('[Permission Analyzer] Smart monitoring enabled');
+  console.log('[Permission Analyzer] Location: Logs new actions (5s+ apart), ignores background updates');
 })();
